@@ -1,0 +1,15 @@
+# Copy to config.local.yaml (git-ignored), adjust and apply once:
+#   kubectl -n store apply -f k8s/config.local.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-config
+data:
+  SERVER_PORT: '8080'
+  MANAGEMENT_PORT: '9091'
+  AUTH_URL: http://auth:8080
+  ACCOUNT_URL: http://account:8080
+  ORDER_URL: http://order:8080
+  PRODUCT_URL: http://product:8080
+  EXCHANGE_URL: http://exchange:8080
+  CORS_ALLOWED_ORIGINS: https://REPLACE_WITH_FRONTEND_ORIGIN
