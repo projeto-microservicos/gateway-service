@@ -38,7 +38,7 @@ jobs:
         run: python3 scripts/init-env.py && docker compose config --quiet
 
   # Runs only on main and only after the AWS side is prepared:
-  # set the organization variable AWS_ROLE_ARN (see README, "Deploy").
+  # set the repository variable AWS_ROLE_ARN (Settings > Secrets and variables > Actions).
   deploy:
     needs: verify
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.AWS_ROLE_ARN != ''

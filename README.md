@@ -41,7 +41,7 @@ curl -i -X POST localhost:8080/auth/login -H 'Content-Type: application/json' -d
 
 ## CI/CD (GitHub Actions)
 
-**verify** em todo push/PR; **deploy** para o ECR `gateway-service` e EKS em push na `main`, quando a variável da organização `AWS_ROLE_ARN` existe (OIDC, sem chave AWS no GitHub).
+**verify** em todo push/PR; **deploy** para o ECR `gateway-service` e EKS em push na `main`, quando a variável de repositório `AWS_ROLE_ARN` existe (OIDC, sem chave AWS no GitHub).
 
 ### Preparação única no cluster
 
