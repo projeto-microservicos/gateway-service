@@ -1,6 +1,8 @@
 package store.gateway.security;
 
 import java.util.Optional;
+import java.util.Map;
+import java.time.Duration;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -9,6 +11,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
@@ -21,8 +24,7 @@ import reactor.core.publisher.Mono;
  *   <li>for everything else, resolves the token into an account id and forwards it as
  *       {@code id-account}, or answers 401.</li>
  * </ol>
- * Steps 1-3 and token extraction are done. Step 4's call to auth-service is yours
- * ({@link #resolveAccount}); until then every secured route fails closed with 401.
+ * Token resolution fails closed when auth is unavailable or rejects the token.
  */
 @Component
 public class AuthorizationFilter implements GlobalFilter, Ordered {
@@ -31,10 +33,12 @@ public class AuthorizationFilter implements GlobalFilter, Ordered {
 
     private final RouteRules rules;
     private final GatewaySecurityProperties properties;
+    private final WebClient auth;
 
     public AuthorizationFilter(RouteRules rules, GatewaySecurityProperties properties) {
         this.rules = rules;
         this.properties = properties;
+        this.auth = WebClient.builder().build();
     }
 
     @Override
@@ -65,14 +69,18 @@ public class AuthorizationFilter implements GlobalFilter, Ordered {
     /**
      * Turns a token into the account id, or empty when the token is not valid.
      *
-     * <p>TODO(gateway): POST {@code properties.authSolveUrl()} with body {"token": token}
-     * using WebClient (inject a WebClient.Builder). On 200 read "idAccount" from the JSON
-     * body; on 401 or any error return Mono.empty() (never let the request through).
-     * Add a short timeout so a slow auth-service cannot hold gateway connections.
+     * Auth is internal; the client cannot choose the account header or solve endpoint.
      */
     Mono<String> resolveAccount(String token) {
-        return Mono.empty();
+        return auth.post().uri(properties.authSolveUrl()).bodyValue(Map.of("token", token))
+            .retrieve().bodyToMono(ResolvedAccount.class)
+            .timeout(Duration.ofSeconds(2))
+            .map(ResolvedAccount::idAccount)
+            .filter(id -> !id.isBlank())
+            .onErrorResume(error -> Mono.empty());
     }
+
+    private record ResolvedAccount(String idAccount) {}
 
     /** The cookie set by auth-service, or an "Authorization: Bearer ..." header (scripts, load tests). */
     Optional<String> extractToken(ServerHttpRequest request) {

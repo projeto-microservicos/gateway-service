@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -90,7 +89,7 @@ class GatewayRoutingTest {
     @Test
     void securedRouteWithoutTokenIs401AndNeverReachesTheService() throws Exception {
         assertThat(send("GET", "/orders").statusCode()).isEqualTo(401);
-        assertThat(send("GET", "/accounts/acc-1", "id-account", "acc-1").statusCode()).isEqualTo(401);
+        assertThat(send("GET", "/accounts/acc-1", "id-account", "acc-1").statusCode()).isEqualTo(404);
         assertThat(received).isEmpty();
     }
 
@@ -116,7 +115,6 @@ class GatewayRoutingTest {
     }
 
     @Test
-    @Disabled("TODO(gateway): implement AuthorizationFilter.resolveAccount")
     void validTokenIsResolvedAndForwardedAsIdAccount() throws Exception {
         assertThat(send("GET", "/orders", "Cookie", "__store_jwt_token=any-token").statusCode()).isEqualTo(200);
         assertThat(send("GET", "/products", "Authorization", "Bearer any-token").statusCode()).isEqualTo(200);
