@@ -107,6 +107,23 @@ class GatewayRoutingTest {
     }
 
     @Test
+    void healthCheckAnswers200WithoutTokenAndIsNotRouted() throws Exception {
+        var response = send("GET", "/gateway/health-check");
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).isEmpty();
+        assertThat(received).isEmpty();
+    }
+
+    /** 401 (not 404) proves the path matched a route; without a token nothing reaches the service. */
+    @Test
+    void exchangeIsRoutedInSingularAndPlural() throws Exception {
+        assertThat(send("GET", "/exchanges/USD/EUR").statusCode()).isEqualTo(401);
+        assertThat(send("GET", "/exchange/USD/EUR").statusCode()).isEqualTo(401);
+        assertThat(send("GET", "/exchangesfoo/USD/EUR").statusCode()).isEqualTo(404);
+        assertThat(received).isEmpty();
+    }
+
+    @Test
     void readinessProbeIsUpOnManagementPort() throws Exception {
         var response = http.send(HttpRequest.newBuilder(
             URI.create("http://localhost:" + managementPort + "/actuator/health/readiness")).build(),
@@ -120,7 +137,8 @@ class GatewayRoutingTest {
     void validTokenIsResolvedAndForwardedAsIdAccount() throws Exception {
         assertThat(send("GET", "/orders", "Cookie", "__store_jwt_token=any-token").statusCode()).isEqualTo(200);
         assertThat(send("GET", "/products", "Authorization", "Bearer any-token").statusCode()).isEqualTo(200);
-        assertThat(received).containsExactly("/orders acc-1", "/products acc-1");
+        assertThat(send("GET", "/exchange/USD/EUR", "Authorization", "Bearer any-token").statusCode()).isEqualTo(200);
+        assertThat(received).containsExactly("/orders acc-1", "/products acc-1", "/exchange/USD/EUR acc-1");
     }
 
 }

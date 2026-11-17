@@ -36,7 +36,8 @@ spring:
           - id: exchange
             uri: ${EXCHANGE_URL:http://exchange:8080}
             predicates:
-            - Path=/exchanges/**
+            # exchange.md declares /exchanges/{from}/{to} but its example (and the BACEN page) use /exchange/...
+            - Path=/exchanges/**,/exchange/**
 
 store:
   gateway:
@@ -47,6 +48,7 @@ store:
     - POST /auth/register
     - POST /auth/login
     - POST /auth/logout
+    - GET /gateway/health-check
     # Service-to-service endpoints that must never be reachable from outside (404).
     internal-routes:
     - ANY /auth/solve

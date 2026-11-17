@@ -10,7 +10,8 @@ API Gateway da loja (Java 25 / Spring Boot 4.1 / Spring Cloud Gateway WebFlux). 
 | `/accounts/**` | `ACCOUNT_URL` (account) | token |
 | `/orders/**` | `ORDER_URL` (order) | token |
 | `/products/**` | `PRODUCT_URL` (product) | token |
-| `/exchanges/**` | `EXCHANGE_URL` (exchange) | token |
+| `/exchanges/**` e `/exchange/**` | `EXCHANGE_URL` (exchange) | token (o enunciado usa os dois prefixos) |
+| `GET /gateway/health-check` | o próprio gateway | aberto; 200 sem corpo. As probes de startup e liveness chamam este endpoint |
 | `/auth/solve`, `/accounts/login` | — | **404**: só serviço a serviço |
 
 O token vem do cookie `__store_jwt_token` (navegador) ou de `Authorization: Bearer <token>` (scripts, testes de carga). Rotas abertas e internas ficam em `store.gateway.*` no [`application.yaml`](src/main/resources/application.yaml).
