@@ -1,14 +1,21 @@
 package store.gateway.security;
 
+import java.time.Duration;
+import java.util.Map;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpCookie;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
@@ -21,20 +28,25 @@ import reactor.core.publisher.Mono;
  *   <li>for everything else, resolves the token into an account id and forwards it as
  *       {@code id-account}, or answers 401.</li>
  * </ol>
- * Steps 1-3 and token extraction are done. Step 4's call to auth-service is yours
- * ({@link #resolveAccount}); until then every secured route fails closed with 401.
+ * Step 4 calls auth-service ({@code POST /auth/solve}) with a short timeout and fails closed: any
+ * error, timeout or non-200 answer is 401, never a request let through without identity.
  */
 @Component
 public class AuthorizationFilter implements GlobalFilter, Ordered {
 
     public static final String ID_ACCOUNT = "id-account";
+    /** auth-service only checks a signature; anything slower than this is treated as unavailable. */
+    static final Duration SOLVE_TIMEOUT = Duration.ofSeconds(2);
+    private static final Logger log = LoggerFactory.getLogger(AuthorizationFilter.class);
 
     private final RouteRules rules;
     private final GatewaySecurityProperties properties;
+    private final WebClient auth;
 
-    public AuthorizationFilter(RouteRules rules, GatewaySecurityProperties properties) {
+    public AuthorizationFilter(RouteRules rules, GatewaySecurityProperties properties, WebClient.Builder webClient) {
         this.rules = rules;
         this.properties = properties;
+        this.auth = webClient.build();
     }
 
     @Override
@@ -62,17 +74,28 @@ public class AuthorizationFilter implements GlobalFilter, Ordered {
                 .orElseGet(() -> reject(clean, HttpStatus.UNAUTHORIZED)));
     }
 
-    /**
-     * Turns a token into the account id, or empty when the token is not valid.
-     *
-     * <p>TODO(gateway): POST {@code properties.authSolveUrl()} with body {"token": token}
-     * using WebClient (inject a WebClient.Builder). On 200 read "idAccount" from the JSON
-     * body; on 401 or any error return Mono.empty() (never let the request through).
-     * Add a short timeout so a slow auth-service cannot hold gateway connections.
-     */
+    /** Turns a token into the account id, or empty when the token is not valid (or auth-service fails). */
     Mono<String> resolveAccount(String token) {
-        return Mono.empty();
+        return auth.post()
+            .uri(properties.authSolveUrl())
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(Map.of("token", token))
+            .retrieve()
+            .bodyToMono(SolvedToken.class)
+            .timeout(SOLVE_TIMEOUT)
+            .mapNotNull(SolvedToken::idAccount)
+            .filter(id -> !id.isBlank())
+            .onErrorResume(error -> {
+                // 401 is the normal "bad token" answer; anything else means auth-service is in trouble.
+                if (!(error instanceof WebClientResponseException.Unauthorized)) {
+                    log.warn("auth-service could not resolve a token ({})", error.getClass().getSimpleName());
+                }
+                return Mono.empty();
+            });
     }
+
+    /** Body of auth-service's {@code /auth/solve} answer. */
+    record SolvedToken(String idAccount) {}
 
     /** The cookie set by auth-service, or an "Authorization: Bearer ..." header (scripts, load tests). */
     Optional<String> extractToken(ServerHttpRequest request) {

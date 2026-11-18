@@ -48,6 +48,8 @@ store:
     - POST /auth/register
     - POST /auth/login
     - POST /auth/logout
+    # The access token may already be expired here; the refresh token is checked by auth-service.
+    - POST /auth/refresh
     - GET /gateway/health-check
     # Service-to-service endpoints that must never be reachable from outside (404).
     internal-routes:

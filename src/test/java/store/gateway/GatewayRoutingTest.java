@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -42,13 +41,16 @@ class GatewayRoutingTest {
         upstream = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         upstream.createContext("/", exchange -> {
             String path = exchange.getRequestURI().getPath();
-            String body = path.equals("/auth/solve") ? "{\"idAccount\":\"acc-1\"}" : "{}";
+            String request = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            // auth-service stub: "bad-token" is rejected (401) like a tampered or expired JWT.
+            boolean rejected = path.equals("/auth/solve") && request.contains("bad-token");
+            String body = path.equals("/auth/solve") && !rejected ? "{\"idAccount\":\"acc-1\"}" : "{}";
             if (!path.equals("/auth/solve")) {
                 received.add(path + " " + exchange.getRequestHeaders().getFirst("id-account"));
             }
             byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
-            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.sendResponseHeaders(rejected ? 401 : 200, bytes.length);
             exchange.getResponseBody().write(bytes);
             exchange.close();
         });
@@ -124,6 +126,25 @@ class GatewayRoutingTest {
     }
 
     @Test
+    void tokenRejectedByAuthIs401AndNeverReachesTheService() throws Exception {
+        assertThat(send("GET", "/orders", "Authorization", "Bearer bad-token").statusCode()).isEqualTo(401);
+        assertThat(send("GET", "/products", "Cookie", "__store_jwt_token=bad-token").statusCode()).isEqualTo(401);
+        assertThat(received).isEmpty();
+    }
+
+    @Test
+    void refreshIsOpenBecauseTheAccessTokenMayHaveExpired() throws Exception {
+        assertThat(send("POST", "/auth/refresh").statusCode()).isEqualTo(200);
+        assertThat(received).containsExactly("/auth/refresh null");
+    }
+
+    @Test
+    void forgedIdentityIsReplacedByTheResolvedOne() throws Exception {
+        send("GET", "/accounts/acc-1", "Authorization", "Bearer any-token", "id-account", "someone-else");
+        assertThat(received).containsExactly("/accounts/acc-1 acc-1");
+    }
+
+    @Test
     void readinessProbeIsUpOnManagementPort() throws Exception {
         var response = http.send(HttpRequest.newBuilder(
             URI.create("http://localhost:" + managementPort + "/actuator/health/readiness")).build(),
@@ -133,7 +154,6 @@ class GatewayRoutingTest {
     }
 
     @Test
-    @Disabled("TODO(gateway): implement AuthorizationFilter.resolveAccount")
     void validTokenIsResolvedAndForwardedAsIdAccount() throws Exception {
         assertThat(send("GET", "/orders", "Cookie", "__store_jwt_token=any-token").statusCode()).isEqualTo(200);
         assertThat(send("GET", "/products", "Authorization", "Bearer any-token").statusCode()).isEqualTo(200);
