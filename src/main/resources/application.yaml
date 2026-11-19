@@ -54,7 +54,8 @@ store:
     # Service-to-service endpoints that must never be reachable from outside (404).
     internal-routes:
     - ANY /auth/solve
-    - ANY /accounts/login
+    - ANY /accounts/**
+    - ANY /accounts
 
 management:
   server:
