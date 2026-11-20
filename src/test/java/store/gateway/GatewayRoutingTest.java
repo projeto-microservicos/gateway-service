@@ -56,7 +56,7 @@ class GatewayRoutingTest {
         });
         upstream.start();
         String url = "http://127.0.0.1:" + upstream.getAddress().getPort();
-        for (String service : List.of("AUTH_URL", "ACCOUNT_URL", "ORDER_URL", "PRODUCT_URL", "EXCHANGE_URL")) {
+        for (String service : List.of("AUTH_URL", "ACCOUNT_URL", "ORDER_URL", "PRODUCT_URL", "EXCHANGE_URL", "FRONTEND_URL")) {
             registry.add(service, () -> url);
         }
         registry.add("store.gateway.auth-solve-url", () -> url + "/auth/solve");
@@ -87,6 +87,27 @@ class GatewayRoutingTest {
     void clientCannotForgeTheIdentityHeader() throws Exception {
         send("POST", "/auth/register", "id-account", "someone-else");
         assertThat(received).containsExactly("/auth/register null");
+    }
+
+    @Test
+    void frontendIsServedWithoutTokenAndWithoutIdentity() throws Exception {
+        assertThat(send("GET", "/app/", "id-account", "someone-else").statusCode()).isEqualTo(200);
+        assertThat(send("GET", "/app/assets/index.js").statusCode()).isEqualTo(200);
+        assertThat(received).containsExactly("/app/ null", "/app/assets/index.js null");
+    }
+
+    @Test
+    void rootRedirectsToTheFrontend() throws Exception {
+        var response = send("GET", "/");
+        assertThat(response.statusCode()).isEqualTo(302);
+        assertThat(response.headers().firstValue("Location")).hasValue("/app/");
+        assertThat(received).isEmpty();
+    }
+
+    @Test
+    void frontendRouteOnlyOpensReads() throws Exception {
+        assertThat(send("POST", "/app/").statusCode()).isEqualTo(401);
+        assertThat(received).isEmpty();
     }
 
     @Test

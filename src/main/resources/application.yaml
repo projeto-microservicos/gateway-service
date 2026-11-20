@@ -38,6 +38,17 @@ spring:
             predicates:
             # exchange.md declares /exchanges/{from}/{to} but its example (and the BACEN page) use /exchange/...
             - Path=/exchanges/**,/exchange/**
+          # Web front end (static SPA served by nginx). Same origin as the API, so no CORS.
+          - id: frontend
+            uri: ${FRONTEND_URL:http://frontend:8080}
+            predicates:
+            - Path=/app,/app/**
+          - id: root
+            uri: no://op
+            predicates:
+            - Path=/
+            filters:
+            - RedirectTo=302, /app/
 
 store:
   gateway:
@@ -51,6 +62,9 @@ store:
     # The access token may already be expired here; the refresh token is checked by auth-service.
     - POST /auth/refresh
     - GET /gateway/health-check
+    # Static front end: HTML, JS and CSS only; every API call it makes is checked as usual.
+    - GET /
+    - GET /app/**
     # Service-to-service endpoints that must never be reachable from outside (404).
     internal-routes:
     - ANY /auth/solve
